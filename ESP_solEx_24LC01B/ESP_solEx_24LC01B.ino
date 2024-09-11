@@ -1,22 +1,21 @@
-// programme pour le Sol'Ex (solar explorer) de Christian Buil.
-// version originale : Jean Brunet  le 17/01/2023 écrite pour commander le déplacement du réseau.
+// program for Sol'Ex (solar explorer) by Christian Buil.
+// original version: Jean Brunet on 01/17/2023 written to order the movement of the network.
+// This version: Gord Tulloch 2024/7/30 translated to English
 
-// Cette nouvelle version a été réécrite depuis le 22/04/2023 par Pascal Berteau avec 5 raies programmées 
-// et la commande de 3 moteurs, réseau, focus caméra et focus lunette.
-// Le programme a été l'objet de nombreux ajouts par Jean Brunet et Pascal Berteau pour finalement
-// aboutir à celui-ci.
+// This new version has been rewritten since 04/22/2023 by Pascal Berteau with 5 programmed lines 
+// and the control of 3 motors, network, camera focus and telescope focus.
+// The program was the subject of numerous additions by Jean Brunet and Pascal Berteau to finally
+// lead to this one.
 
-// La position des raies est mémorisée, ainsi que la position du focus caméra en appuyant sur Mémo.
-// Le couplage des moteurs réseau et focus caméra permet de se positionner sur une raie en obtenant automatiquement la netteté.
-// Ainsi il n'y a pas besoin d'intervenir manuellement sur Sol'Ex, ni sur la lunette de visée qui utilise le 3ème moteur.
+// The position of the lines is memorized, as well as the position of the camera focus by pressing Memo.
+// The coupling of the network and camera focus motors allows you to position yourself on a line by automatically obtaining sharpness.
+// So there is no need to intervene manually on Sol'Ex, nor on the riflescope which uses the 3rd motor.
 
-// Ce programme est à choisir pour la mémoire EEPROM 24LC01B.
-// Si vous utilisez un module AT24Cxx, prenez le programme ESP32_SolEx_AT24Cxx.ino
-
-// Pascal Berteau, Jean Brunet - le 12 / 06 /2023. Ce programme peut être distribué librement.
+// This program is to be chosen for the 24LC01B EEPROM memory.
+// If you use an AT24Cxx module, take the program ESP32_SolEx_AT24Cxx.ino
 
 // IMPORTANT !!
-#define initmemo 0  // Mettre à 1 lors de la première programmation pour l'initialisation de la mémoire. Ensuite mettre initmemo à 0
+#define initmemo 1  // Set to 1 during the first programming for memory initialization. Then set initmemo to 0
 
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -40,7 +39,7 @@
 #define MOTOR_PIN_2   5  // Yellow - 28BYJ48 pin 3
 #define MOTOR_PIN_4  17   //  Orange - 28BYJ48 pin 4
 
-#define adresse_EEPROM 0x50   // eeprom externe 24LC01B
+#define adresse_EEPROM 0x50   // external eeprom 24LC01B
 #define Adr1_RW_EEPROM 0
 #define Adr2_RW_EEPROM 1
 
@@ -54,7 +53,7 @@ unsigned int RAIECa = 670;
 
 
 const char* ssid     = "SolEx";
-const char* password = "solex1234";  // A MODIFIER si plusieurs Sol'Ex proches
+const char* password = "solex1234";  // TO MODIFY if several Sol'Ex nearby
 WiFiServer server(80);
 
 String header;
@@ -72,14 +71,14 @@ const unsigned int STEPFoc2 = 50;
 const unsigned int STEPFoc3 = 200; 
 
 const unsigned int Backlash_Res = 15;  
-const unsigned int Backlash_Cam = 15 + 25;  // jeux pignons (15) et jeux focus hélicoïdal. (25) A ajuster si besoin       
+const unsigned int Backlash_Cam = 15 + 25;  // pinion sets (15) and helical focus sets. (25) To be adjusted if necessary      
 const unsigned int Backlash_Foc = 15;  
 
 
 int unsigned STEPREL = 0;
 unsigned int indice_ray_select = 0;
 
-const unsigned long STEP_DELAY_MICROSEC = 5000;  // vitesse moteur
+const unsigned long STEP_DELAY_MICROSEC = 5000;  // motor speed
 int cycle = 0;
 int cycle2 = 0;
 int cycle3 = 0;
@@ -103,9 +102,10 @@ setup
 void setup() 
 {
     // Initialize serial port I/O.
-    // Serial.begin(115200); // seulement pour déboggage
+    //Serial.begin(115200); // only for debugging
+    //Serial.println("Sol'Ex 3 motor driver begins\n");
 
-     Wire.begin();
+    Wire.begin();
     // Initialize motor control pins...
     pinMode(MOTOR_PIN_1, OUTPUT);
     pinMode(MOTOR_PIN_2, OUTPUT);
@@ -128,13 +128,19 @@ void setup()
     dir_Foc = true;
     
     last_step_time = 0L;
+
+   // WiFi.mode(WIFI_AP);
+   // WiFi.setTxPower(WIFI_POWER_5dBm);
     WiFi.softAP(ssid, password);
 
     IPAddress IP = WiFi.softAPIP();
+    //Serial.print("IP Address is ");
+    //Serial.println(IP);
+
     server.begin();
-    // lecture en mémoire EEPROM de la dernière position enregistrée.
+    // // reading from EEPROM memory of the last recorded position.
     #if initmemo
-     for(int i = 0 ; i < 30; i++){   // met la mémoire à 0 pour la première utilisation. Remettre initmemo à 0 ensuite
+     for(int i = 0 ; i < 30; i++){   // set the memory to 0 for the first use. Then reset initmemo to 0
        writebyte(adresse_EEPROM,i,0);
      }
     indice_ray_select = 20;  positionRes=RAIEHa; WriteMemoryRes(indice_ray_select);
@@ -162,73 +168,73 @@ void setup()
     dir_Foc = readbyte(adresse_EEPROM, 11);
 }
  /* --------------------------------
-Boucle de traitement
+Processing loop
 -------------------------------------*/
 void loop() 
 {
-	Wificommmand();  // affichage de la page web et traitement des retours utilisateur
+	Wificommmand();  // display of the web page and processing of user feedback
 }
 
 
 /*---------------------------------------------------------------------------------------------
- Page web et traitement des commandes envoyées par l'utilisateur
+ Web page and processing of orders sent by the user
 ------------------------------------------------------------------------------------------------*/
 void Wificommmand()
 {
 
 	WiFiClient client = server.available();   // Listen for incoming clients
-  	CouplageOk = false; 
+  CouplageOk = false; 
 	if (client){ 
    while (client.connected()){            // loop while the client's connected
 		if (client.available()) {             // if there's bytes to read from the client,
 			char c = client.read();             // read a byte, then
 			header += c;
-			if (c == '\n') // si c'est la fin de la commande reçue
+			if (c == '\n') // if it is the end of the order received
 			{          
 				client.println("HTTP/1.1 200 OK");
 				client.println("Content-type:text/html");
 				client.println("Connection: close");
 				client.println();
 
-			  if (header.indexOf("couplage") >= 0){  // couplage est coché, le moteur de la caméra est fonctionnel
+			  if (header.indexOf("couplage") >= 0){  // coupling is checked, the camera motor is functional
 					  CouplageOk = true;
 				}
-        // corrections manuelles de déplacement  
-				if (header.indexOf("GPR") >= 0){ // Gauche / Petit Pas / Reseau
+        // manual displacement corrections 
+				if (header.indexOf("GPR") >= 0){ // Left / Small Step / Network
             direction = false;
             positionRes = positionRes-STEPRes1;
             commandMotor(STEPRes1,1);
 				}
-				else if (header.indexOf("GMR") >= 0){  // Gauche Moyen Reseau
+				else if (header.indexOf("GMR") >= 0){  // Left Middle Network
             direction = false;
             positionRes = positionRes-STEPRes2;
             commandMotor(STEPRes2,1);
          }
-         else if (header.indexOf("GGR") >= 0){ // Gauche Grand Reseau
+         else if (header.indexOf("GGR") >= 0){ // Left Large Network
             direction = false;
             positionRes = positionRes-STEPRes3;
             commandMotor(STEPRes3,1);
          }
-				else if (header.indexOf("DPR") >= 0){    // Droit / Petit Pas / Reseau
+				else if (header.indexOf("DPR") >= 0){    // Right / Small Step / Network
             direction = true;
             positionRes = positionRes+STEPRes1;  
             commandMotor(STEPRes1,1);
 				 }
-				 else if (header.indexOf("DMR") >= 0){ // Droit / Moyen Pas / Reseau
+				 else if (header.indexOf("DMR") >= 0){ // Right / Medium Steps / Network
             direction = true;
             positionRes = positionRes+STEPRes2;  
             commandMotor(STEPRes2,1);	 
 				 }
-          else if (header.indexOf("DGR") >= 0){ // Droit / Grand Pas / Reseau
+          else if (header.indexOf("DGR") >= 0){ // Right / Big Step / Network
             direction = true;
             positionRes = positionRes+STEPRes3;  
             commandMotor(STEPRes3,1);	 
 				// ---------------------------
         	 } 
-          else if (header.indexOf("MemoZ") >= 0){ // Mémorisation ordre 0
+          else if (header.indexOf("MemoZ") >= 0){ // Memorization order 0
             positionRes = 0;
          }
-         else if (header.indexOf("OrdreZ") >= 0){  // Retour à l'ordre 0           
+         else if (header.indexOf("OrdreZ") >= 0){  // Return to order 0          
             Goto(STEPZero,1);
 				  }
           else if (header.indexOf("CamInF") >= 0){ // Focus Camera in <<
@@ -251,42 +257,42 @@ void Wificommmand()
             positionCam = positionCam+STEPCam1;  
             commandMotor(STEPCam1,2);	 
 				 } 
-          else if (header.indexOf("MemoCam") >= 0){   // mémorisation de la mise au point pour la raie en cours.
-          // enregistrement la position du moteur Cam pour une raie sélectionnée        
+          else if (header.indexOf("MemoCam") >= 0){   // memorize the focus for the current line.
+          // record the position of the Cam motor for a selected line    
             WriteMemoryCam(indice_ray_select);
             WriteMemoryRes(indice_ray_select);
           }
-          else if (header.indexOf("FocInX") >= 0) { //Focus Lunette in <<<
+          else if (header.indexOf("FocInX") >= 0) { //Focus Telescope in <<<
 					   direction = false;
              positionFoc=positionFoc-STEPFoc3;  
 				    commandMotor(STEPFoc3,3);	 
 				 } 
-          else if (header.indexOf("FocInF") >= 0){ //Focus Lunette in <<
+          else if (header.indexOf("FocInF") >= 0){ //Focus Telescope in <<
 					  direction = false;
             positionFoc = positionFoc-STEPFoc2;  
 				    commandMotor(STEPFoc2,3);	 
 				 }
-        else if (header.indexOf("FocInS") >= 0){ //Focus Lunette in <
+        else if (header.indexOf("FocInS") >= 0){ //Focus Telescope in <
             direction = false;
             positionFoc = positionFoc-STEPFoc1;  
             commandMotor(STEPFoc1,3);	 
 				 }
-         else if (header.indexOf("FocOutX") >= 0) { //Focus Lunette Out >>>
+         else if (header.indexOf("FocOutX") >= 0) { //Focus Telescope Out >>>
             direction = true;
             positionFoc=positionFoc+STEPFoc3;  
             commandMotor(STEPFoc3,3);	 
 				 }
-          else if (header.indexOf("FocOutF") >= 0){ //Focus Lunette Out >>
+          else if (header.indexOf("FocOutF") >= 0){ //Focus Telescope Out >>
             direction = true;
             positionFoc = positionFoc+STEPFoc2;  
             commandMotor(STEPFoc2,3);	 
 				 }
-          else if (header.indexOf("FocOutS") >= 0){ //Focus Lunette Out >
+          else if (header.indexOf("FocOutS") >= 0){ //Focus Telescope Out >
 					  direction = true;
             positionFoc = positionFoc+STEPFoc1;  
 				    commandMotor(STEPFoc1,3);	 
 				 }  
-          else if (header.indexOf("Ca") >= 0){ // Position reseau sur raies définies  
+          else if (header.indexOf("Ca") >= 0){ // Network position on defined lines 
             indice_ray_select = 28; 
             RAIECa = ReadMemoryRes(indice_ray_select);
             Goto(RAIECa,1); 
@@ -355,7 +361,7 @@ String webPage()
   Ch +="</head><body>";    
   
   Ch +="<div style='text-align: center '><H2>Sol'Ex</H2><form enctype='multipart/form data' method=GET>"; 
-  Ch +="<H4>--- R&eacute;seau " + String(positionRes)+ " --- </H4></center>";
+  Ch +="<H4>--- Grating " + String(positionRes)+ " --- </H4></center>";
   Ch +="<input button class='boutonLite2' type='submit' name='GGR' value = '<<<' />"; 
   Ch +="<input button class='boutonLite2' type='submit' name='GMR' value = '<<' />"; 
   Ch +="<input button class='boutonLite2' type='submit' name='GPR' value = '<' />"; 
@@ -374,15 +380,15 @@ String webPage()
   }  
   
   Ch +="<input button class='bouton2' type='submit' name='MemoZ' value = 'Set 0' />";
-  Ch +="<input button class='bouton2' type='submit' name='OrdreZ' value = 'Ordre 0' />";  
-  Ch +="<input button class='bouton2' type='submit' name='MemoCam' value = 'M&eacute;mo' /><br>"; 
+  Ch +="<input button class='bouton2' type='submit' name='OrdreZ' value = 'Order 0' />";  
+  Ch +="<input button class='bouton2' type='submit' name='MemoCam' value = 'Save' /><br>"; 
 
-  Ch +="<H4>--- Cam&eacute;ra " + String(positionCam)+ " --- </H4></center>";
+  Ch +="<H4>--- Camera " + String(positionCam)+ " --- </H4></center>";
   Ch +="<input button class='boutonLite' type='submit' name='CamInF' value = '<<' />"; 
   Ch +="<input button class='boutonLite' type='submit' name='CamInS' value = '<' />"; 
   Ch +="<input button class='boutonLite' type='submit' name='CamOutS' value = '>' />";   
   Ch +="<input button class='boutonLite' type='submit' name='CamOutF' value = '>>' /><br><br>";
-  Ch +="Couplage <input type='checkbox' name='couplage' " + op + " value='couplage'/><br>";
+  Ch +="Connected <input type='checkbox' name='couplage' " + op + " value='couplage'/><br>";
  
   Ch +="<H4>--- Focuser " + String(positionFoc)+ " --- </H4></center>";
   Ch +="<input button class='boutonLite2' type='submit' name='FocInX' value = '<<<' />"; 
@@ -399,7 +405,7 @@ String webPage()
 /*-----------------------------------------
  Routines des 3 moteurs 28BYJ48
  -------------------------------------------*/
-void commandMotor(unsigned int st,unsigned int mt)  // St nombres de pas - mt numéro moteur 0: Reseau 1:foc Cam 2: Foc Lunette
+void commandMotor(unsigned int st,unsigned int mt)  // St number of steps - mt motor number 0: Network 1: Cam 2: Telescope
 {  
   switch (mt){
       case 1:
@@ -417,22 +423,22 @@ void commandMotor(unsigned int st,unsigned int mt)  // St nombres de pas - mt nu
   }         
   for(int i=0;i<st;i++){
 		Motor(mt);
-		// tempo pour fixer la vitesse du moteur
+		// tempo to set the motor speed
 		last_step_time = micros();
 		while(micros() - last_step_time < STEP_DELAY_MICROSEC){}
 	}
-	stop(mt);  // arrêt du moteur
-	setMemory(mt); // mémorisation position moteur
+	stop(mt);  
+	setMemory(mt); // memorize position
 }
 
 /* ----------------------------------------------------------------------
-Envoi moteur 1 à 3 (mt) sur une position (st) en nombe de pas
+Motor sending 1 to 3 (mt) on a position (st) in number of steps
 ---------------------------------------------------------------------------*/
-void Goto(unsigned int st,unsigned int mt) // St nombres de pas - mt numéro moteur 0: Reseau 1:foc Cam 2: Foc Lunette
+void Goto(unsigned int st,unsigned int mt) 
 {
    switch (mt){
       case 1:
-      if(positionRes != st)  // déplacement moteur si le moteur n'est pas déjà sur la même position.
+      if(positionRes != st)  // motor movement if the motor is not already in the same position.
       {
         if (positionRes < st)
         {
@@ -451,7 +457,7 @@ void Goto(unsigned int st,unsigned int mt) // St nombres de pas - mt numéro mot
       }
       break;
     case 2:
-     if(positionCam != st)  // déplacement moteur si le moteur n'est pas déjà sur la même position.
+     if(positionCam != st)  // motor movement if the motor is not already in the same position.
       {
       if (positionCam < st)
       {
@@ -528,7 +534,7 @@ if (direction == true){
 
 
 
-void stepMotorRes() //moteur reseau
+void stepMotorRes() // Network
 {
 	switch (cycle){
 		case 0: // 1010
@@ -558,7 +564,7 @@ void stepMotorRes() //moteur reseau
 	}
 }
 
-void stepMotorCam() //moteur camera
+void stepMotorCam() // Camera
 {
   switch (cycle2){
     case 0: // 1010
@@ -589,7 +595,7 @@ void stepMotorCam() //moteur camera
 }
 
 
-void stepMotorFoc() //moteur lunette
+void stepMotorFoc() // Telescope
 {
   switch (cycle3){
     case 0: // 1010
@@ -621,7 +627,7 @@ void stepMotorFoc() //moteur lunette
 
 void stop(unsigned int mt) 
 {
-// met le moteur à l'arrêt, sans alimentation. (limite la consommation)
+// stops the motor, without power. (limits consumption)
 switch (mt){
     case 1:
       digitalWrite(MOTOR_PIN_1, LOW);
@@ -645,13 +651,13 @@ switch (mt){
 }
 
 /* ---------------------------------------------------------------------------
-Lecture / écriture de la position du réseau et de la mise au point de la caméra
+Read/write network position and camera focus
 -------------------------------------------------------------------------------*/
 void WriteMemoryCam(unsigned int IndiceRaie)
 {
   byte hi;
   byte low;
-  hi  = highByte(positionCam);  // sauvegarde en eeprom de la dernière position
+  hi  = highByte(positionCam);  // save last position in eeprom
   low = lowByte(positionCam);
   writebyte(adresse_EEPROM, IndiceRaie, hi);
   writebyte(adresse_EEPROM, IndiceRaie + 1, low);
@@ -668,7 +674,7 @@ void WriteMemoryRes(unsigned int IndiceRaie)
 {
   byte hi;
   byte low;
-  hi  = highByte(positionRes);  // sauvegarde en eeprom de la dernière position
+  hi  = highByte(positionRes);  // save last position in eeprom
   low = lowByte(positionRes);
   writebyte(adresse_EEPROM, IndiceRaie+10, hi);
   writebyte(adresse_EEPROM, IndiceRaie + 11, low);
@@ -682,16 +688,16 @@ unsigned int ReadMemoryRes(unsigned int IndiceRaie)
 }
 
 /* -------------------------------------------
-Mise en mémoire de la position d'un moteur
+Storing the position of a motor
 -----------------------------------------------*/
 void setMemory(unsigned int mt)
 {
-  // Mise en mémoire de la dernière position du moteur utilisé.
+  // Memory of the last position of the motor used.
    byte hi;
    byte low;
   switch (mt){
     case 1:
-        hi = highByte(positionRes);  // sauvegarde en eeprom de la dernière position
+        hi = highByte(positionRes);  // // save last position in eeprom
         low = lowByte(positionRes);
         writebyte(adresse_EEPROM, 0, hi);
         writebyte(adresse_EEPROM, 1, low);
@@ -699,7 +705,7 @@ void setMemory(unsigned int mt)
         writebyte(adresse_EEPROM, 3, dir_Res );
         break;
     case 2:
-        hi = highByte(positionCam);  // sauvegarde en eeprom de la dernière position
+        hi = highByte(positionCam);  // // save last position in eeprom
         low = lowByte(positionCam);
         writebyte(adresse_EEPROM, 4, hi);
         writebyte(adresse_EEPROM, 5, low);
@@ -707,7 +713,7 @@ void setMemory(unsigned int mt)
         writebyte(adresse_EEPROM, 7, dir_Cam );
          break;
     case 3: 
-        hi = highByte(positionFoc);  // sauvegarde en eeprom de la dernière position
+        hi = highByte(positionFoc);  // // save last position in eeprom
         low = lowByte(positionFoc);
         writebyte(adresse_EEPROM, 8, hi);
         writebyte(adresse_EEPROM, 9, low);
@@ -718,31 +724,31 @@ void setMemory(unsigned int mt)
 }
 
 /* -------------------------------------------
-Lecture de l'EEPROM 24LC01B
+Reading the 24LC01B EEPROM
 -----------------------------------------------*/
 byte readbyte(int adressei2c, unsigned int adresseMem )
 {
 	byte lecture = 0;
 
-	Wire.beginTransmission(adressei2c);  // adresse i2c du 24LC01B
-	Wire.write(adresseMem); 		// adresse de l'octet qu'on veut lire
+	Wire.beginTransmission(adressei2c);  // i2c address of 24LC01B
+	Wire.write(adresseMem); 		// address of the byte you want to read
 	Wire.endTransmission();
-	Wire.requestFrom(adressei2c, 1); // demande lecture de l'octet
+	Wire.requestFrom(adressei2c, 1); // request to read the byte
 	delay(5);
 	if (Wire.available()) {  
-		lecture = Wire.read(); // lecture de l'info
+		lecture = Wire.read(); // reading the info
 	}
   return lecture;
 }
 
 /* -------------------------------------------
-Ecriture de l'EEPROM 24LC01B
+Writing the 24LC01B EEPROM
 -----------------------------------------------*/
 void writebyte(int adressei2c, unsigned int adresseMem, byte data )
 {
-	 Wire.beginTransmission(adressei2c); //adresse I2C de l'EEPROM
-	 Wire.write(adresseMem); // adresse de l'octet à modifier
-	 Wire.write(data);		 // écrture de l'octet
-	 Wire.endTransmission(); // fin de la transmission I2C
+	 Wire.beginTransmission(adressei2c); // i2c address of 24LC01B
+	 Wire.write(adresseMem); // address of the byte you want to write
+	 Wire.write(data);		 // write it
+	 Wire.endTransmission(); // finish
 	 delay(5);
 }
