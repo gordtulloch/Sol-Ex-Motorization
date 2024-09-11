@@ -33,8 +33,8 @@ unsigned int RAIEMg = 910;
 unsigned int RAIEHb = 850;
 unsigned int RAIECa = 670;
 
-const char *SSID = "SunriseGuest";
-const char *PWD = "Summer0824Sunrise";
+const char *SSID = "enter";
+const char *PWD = "enter";
 
 AsyncWebServer server(80);
 
